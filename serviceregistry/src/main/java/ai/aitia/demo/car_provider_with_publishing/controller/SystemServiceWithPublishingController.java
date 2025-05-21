@@ -19,8 +19,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import ai.aitia.demo.car_common.dto.RegisteredSystemRequestDTO;
-import ai.aitia.demo.car_common.dto.RegisteredSystemResponseDTO;
+import ai.aitia.demo.car_provider_with_publishing.common.RegisteredSystemRequestDTO;
+import ai.aitia.demo.car_provider_with_publishing.common.RegisteredSystemResponseDTO;
 import ai.aitia.demo.car_provider_with_publishing.database.DTOConverter;
 import ai.aitia.demo.car_provider_with_publishing.database.InMemorySystemDB;
 import ai.aitia.demo.car_provider_with_publishing.entity.RegisteredSystem;
