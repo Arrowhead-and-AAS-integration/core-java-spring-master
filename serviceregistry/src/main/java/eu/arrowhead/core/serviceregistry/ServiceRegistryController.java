@@ -29,6 +29,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.logging.LogLevel;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -43,6 +44,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponents;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import eu.arrowhead.common.CommonConstants;
 import eu.arrowhead.common.CoreCommonConstants;
@@ -64,6 +67,7 @@ import eu.arrowhead.common.dto.internal.ServiceInterfacesListResponseDTO;
 import eu.arrowhead.common.dto.internal.ServiceRegistryGroupedResponseDTO;
 import eu.arrowhead.common.dto.internal.ServiceRegistryListResponseDTO;
 import eu.arrowhead.common.dto.internal.SystemListResponseDTO;
+import eu.arrowhead.common.dto.shared.EventPublishRequestDTO;
 import eu.arrowhead.common.dto.shared.ServiceDefinitionResponseDTO;
 import eu.arrowhead.common.dto.shared.ServiceInterfaceResponseDTO;
 import eu.arrowhead.common.dto.shared.ServiceQueryFormDTO;
@@ -75,8 +79,10 @@ import eu.arrowhead.common.dto.shared.ServiceRegistryResponseDTO;
 import eu.arrowhead.common.dto.shared.ServiceSecurityType;
 import eu.arrowhead.common.dto.shared.SystemRequestDTO;
 import eu.arrowhead.common.dto.shared.SystemResponseDTO;
+import eu.arrowhead.common.exception.ArrowheadException;
 import eu.arrowhead.common.exception.BadPayloadException;
 import eu.arrowhead.common.exception.InvalidParameterException;
+import eu.arrowhead.common.http.HttpService;
 import eu.arrowhead.common.processor.NetworkAddressDetector;
 import eu.arrowhead.common.processor.NetworkAddressPreProcessor;
 import eu.arrowhead.common.processor.model.AddressDetectionResult;
@@ -211,6 +217,12 @@ public class ServiceRegistryController {
 	@Autowired
 	private NetworkAddressDetector networkAddressDetector;
 	
+	@Autowired
+    private ServiceRegistryApplicationInitListener serviceRegistryApplicationInitListener;
+
+	@Autowired
+	private HttpService httpService;
+
 	@Value(CoreCommonConstants.$USE_STRICT_SERVICE_DEFINITION_VERIFIER_WD)
 	private boolean useStrictServiceDefinitionVerifier;
 	
@@ -349,7 +361,28 @@ public class ServiceRegistryController {
 	@PostMapping(path = SYSTEMS_URI, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
 	@ResponseStatus(org.springframework.http.HttpStatus.CREATED)
 	@ResponseBody public SystemResponseDTO addSystem(@RequestBody final SystemRequestDTO request) {
-		return callCreateSystem(null, request, CommonConstants.SERVICEREGISTRY_URI + SYSTEMS_URI);
+		logger.error("'{}' system is being creating.", request.getSystemName()); 
+		SystemResponseDTO response = callCreateSystem(null, request, CommonConstants.SERVICEREGISTRY_URI + SYSTEMS_URI);
+		if(request.getSystemName().equalsIgnoreCase("eventhandler")) {
+			logger.error("The created system is Event Handler");
+		}
+		else if (!request.getSystemName().equalsIgnoreCase("serviceregistry") &&
+				 !request.getSystemName().equalsIgnoreCase("authorization") &&
+				 !request.getSystemName().equalsIgnoreCase("orchestrator")) {
+			logger.error("Publishing event...");
+			//-------------------------------------------------------------------------------------------------
+			final Map<String,String> metadata = null;
+			final String payload = request.getSystemName() + "/" + request.getAddress();
+			final String timeStamp = Utilities.convertZonedDateTimeToUTCString( ZonedDateTime.now() );
+			final String authInfo = serviceRegistryApplicationInitListener.getAuthInfo();
+
+			final SystemRequestDTO source = new SystemRequestDTO("serviceregistry", "127.0.0.1",
+			8443 , authInfo, null);
+
+			EventPublishRequestDTO eventPublishRequestDTO = new EventPublishRequestDTO("PUBLISHER_DESTROYED", source, metadata, payload, timeStamp);
+			sendPublishEventRequest(eventPublishRequestDTO);
+		}
+		return response;
 	}
 	
 	//-------------------------------------------------------------------------------------------------
@@ -792,8 +825,44 @@ public class ServiceRegistryController {
 		final ServiceRegistryResponseDTO response = serviceRegistryDBService.registerServiceResponse(dto);
 		logger.debug("{} successfully registers its service {}", dto.getProviderSystem().getSystemName(), dto.getServiceDefinition());
 
+		
+		if(dto.getProviderSystem().getSystemName().equalsIgnoreCase("eventhandler")) {
+			logger.error("The created system is Event Handler");
+		}
+		else if (!dto.getProviderSystem().getSystemName().equalsIgnoreCase("serviceregistry") &&
+		!dto.getProviderSystem().getSystemName().equalsIgnoreCase("authorization") &&
+		!dto.getProviderSystem().getSystemName().equalsIgnoreCase("orchestrator")) {
+			logger.error("Publishing addsystem...");
+			//-------------------------------------------------------------------------------------------------
+			final Map<String,String> metadata = null;
+			final String payload = dto.getProviderSystem().getSystemName() + "/" + dto.getProviderSystem().getAddress();
+			final String timeStamp = Utilities.convertZonedDateTimeToUTCString( ZonedDateTime.now() );
+			final String authInfo = serviceRegistryApplicationInitListener.getAuthInfo();
+
+            final SystemRequestDTO source = new SystemRequestDTO(dto.getProviderSystem().getSystemName().toLowerCase().trim(), "127.0.0.1",
+			8443 , authInfo, null);
+
+			EventPublishRequestDTO eventPublishRequestDTO = new EventPublishRequestDTO("PUBLISHER_DESTROYED", source, metadata, payload, timeStamp);
+			logger.error("send publish  addsystem...");
+			sendPublishEventRequest(eventPublishRequestDTO);
+			//serviceRegistryApplicationInitListener.publishMyEvent(dto.getProviderSystem().getSystemName().toLowerCase().trim(), dto.getProviderSystem().getAddress().toLowerCase().trim());
+		}
 		return response;
 	}
+
+	public void sendPublishEventRequest(EventPublishRequestDTO eventPublishRequestDTO) {
+    logger.error("Sending publish event request to Event Handler...");
+
+    final String eventHandlerUri = "https://127.0.0.1:8455" + CommonConstants.EVENTHANDLER_URI + CommonConstants.OP_EVENTHANDLER_PUBLISH; // Ajusta la URI según sea necesario
+    final UriComponents uri = UriComponentsBuilder.fromHttpUrl(eventHandlerUri).build();
+
+    try {
+        httpService.sendRequest(uri, HttpMethod.POST, Void.class, eventPublishRequestDTO);
+        logger.error("Publish event request sent successfully.");
+    } catch (final ArrowheadException ex) {
+        logger.error("Error sending publish event request: {}", ex.getMessage());
+    }
+}
 
 	//-------------------------------------------------------------------------------------------------
 	@ApiOperation(value = SERVICEREGISTRY_REGISTER_DESCRIPTION, response = ServiceRegistryResponseDTO.class, tags = { CoreCommonConstants.SWAGGER_TAG_MGMT })
