@@ -83,7 +83,7 @@ public class PublishEventTask implements Runnable {
 		
 		final String scheme = Utilities.isEmpty(subscription.getSubscriberSystem().getAuthenticationInfo()) ? CommonConstants.HTTP : CommonConstants.HTTPS;
 
-		return Utilities.createURI(scheme, subscription.getSubscriberSystem().getAddress(), subscription.getSubscriberSystem().getPort(), subscription.getNotifyUri());
+		return Utilities.createURI(CommonConstants.HTTPS, subscription.getSubscriberSystem().getAddress(), subscription.getSubscriberSystem().getPort(), subscription.getNotifyUri());
 	}
 	
 	//-------------------------------------------------------------------------------------------------
