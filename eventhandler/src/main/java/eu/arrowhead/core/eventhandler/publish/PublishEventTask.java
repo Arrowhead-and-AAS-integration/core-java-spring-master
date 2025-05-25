@@ -24,6 +24,7 @@ import eu.arrowhead.common.CommonConstants;
 import eu.arrowhead.common.Utilities;
 import eu.arrowhead.common.database.entity.Subscription;
 import eu.arrowhead.common.dto.internal.DTOConverter;
+import eu.arrowhead.common.dto.shared.EventDTO;
 import eu.arrowhead.common.dto.shared.EventPublishRequestDTO;
 import eu.arrowhead.common.http.HttpService;
 
@@ -64,8 +65,10 @@ public class PublishEventTask implements Runnable {
 			final UriComponents subscriptionUri = getSubscriptionUri(subscription);
 			
 			logger.error("Sending event to: {}", subscriptionUri.toUriString());
-			logger.error("Event: {}, {}", publishRequestDTO.getEventType(), publishRequestDTO.getPayload());
-			httpService.sendRequest(subscriptionUri, HttpMethod.POST, Void.class, DTOConverter.convertEventPublishRequestDTOToEventDTO(publishRequestDTO));			
+			
+			EventDTO dto = DTOConverter.convertEventPublishRequestDTOToEventDTO(publishRequestDTO);
+			logger.error("Event: {}, {}", dto.getEventType(), dto.getPayload());
+			httpService.sendRequest(subscriptionUri, HttpMethod.POST, Void.class, dto);			
 		} catch (final Throwable ex) {			
 			logger.error("PUTA MIERDA:" + ex.getCause() + " - " + ex.getMessage(), ex.getStackTrace());	
 		}
